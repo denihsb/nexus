@@ -20,6 +20,7 @@ const weekLoad = [{ day: 'M', value: 42 }, { day: 'T', value: 68 }, { day: 'W', 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!isSupabaseConfigured)
   const [activeView, setActiveView] = useState<View>('Today')
+  const [isMoreOpen, setIsMoreOpen] = useState(false)
   const [capture, setCapture] = useState('')
   const [capturedItems, setCapturedItems] = useState<string[]>([])
 
@@ -57,7 +58,7 @@ function App() {
         {capturedItems.length > 0 && <section className="capture-note"><span className="eyebrow">JUST CAPTURED</span><p>{capturedItems[0]}</p><span>Saved to Inbox. Add context when you are ready.</span></section>}
       </div> : <section className="placeholder-view"><p className="eyebrow accent-text">NEXUS FOUNDATION</p><h1>{activeView}</h1><p>This view is ready for the next implementation slice. Your navigation and application shell are in place.</p><button className="primary-button" onClick={() => setActiveView('Today')} type="button">Back to Today <span>-&gt;</span></button></section>}
     </main>
-    <nav className="mobile-nav" aria-label="Mobile navigation">{navigation.slice(0, 4).map((item) => <button className={activeView === item.label ? 'active' : ''} key={item.label} onClick={() => setActiveView(item.label)} type="button"><span>{item.icon}</span>{item.label}</button>)}<button className="mobile-add" type="button" onClick={() => document.querySelector<HTMLInputElement>('.capture-form input')?.focus()} aria-label="Quick capture">+</button></nav>
+    <nav className="mobile-nav" aria-label="Mobile navigation">{navigation.slice(0, 4).map((item) => <button className={activeView === item.label ? 'active' : ''} key={item.label} onClick={() => { setActiveView(item.label); setIsMoreOpen(false) }} type="button"><span>{item.icon}</span>{item.label}</button>)}<button className="mobile-add" type="button" onClick={() => document.querySelector<HTMLInputElement>('.capture-form input')?.focus()} aria-label="Quick capture">+</button><button className={isMoreOpen || ['Workload', 'Courses'].includes(activeView) ? 'active' : ''} type="button" onClick={() => setIsMoreOpen((open) => !open)}><span>...</span>More</button>{isMoreOpen && <div className="mobile-more-menu"><button type="button" onClick={() => { setActiveView('Workload'); setIsMoreOpen(false) }}>Workload</button><button type="button" onClick={() => { setActiveView('Courses'); setIsMoreOpen(false) }}>Courses</button></div>}</nav>
   </div>
 }
 export default App
