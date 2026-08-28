@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { AuthScreen } from './features/auth/AuthScreen'
 import { CoursesPage } from './features/courses/CoursesPage'
 import { InboxPage } from './features/inbox/InboxPage'
+import { TasksPage } from './features/tasks/TasksPage'
+import type { InboxItem } from './features/inbox/InboxPage'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import './App.css'
 
@@ -22,6 +24,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!isSupabaseConfigured)
   const [activeView, setActiveView] = useState<View>('Today')
   const [isMoreOpen, setIsMoreOpen] = useState(false)
+  const [contextualizingItem, setContextualizingItem] = useState<InboxItem | null>(null)
   const [capture, setCapture] = useState('')
   const [inboxCount, setInboxCount] = useState(0)
 
@@ -58,7 +61,7 @@ function App() {
     </aside>
     <main className="main-content">
       <header className="topbar"><div className="mobile-brand"><span className="brand-mark">+</span>NEXUS</div><div className="date-context"><span className="eyebrow">FRIDAY, AUGUST 28, 2026</span><span className="live-dot">Your week is taking shape</span></div><button className="notification-button" type="button" aria-label="Notifications">*</button></header>
-      {activeView === 'Courses' ? <CoursesPage /> : activeView === 'Inbox' ? <InboxPage onCountChange={setInboxCount} /> : activeView === 'Today' ? <div className="page-wrap">
+      {activeView === 'Courses' ? <CoursesPage /> : activeView === 'Tasks' ? <TasksPage initialInboxItem={contextualizingItem} onInboxProcessed={(id) => { setContextualizingItem(null); setInboxCount((count) => Math.max(0, count - (id ? 1 : 0))) }} /> : activeView === 'Inbox' ? <InboxPage onCountChange={setInboxCount} onContextualize={(item) => { setContextualizingItem(item); setActiveView('Tasks') }} /> : activeView === 'Today' ? <div className="page-wrap">
         <section className="page-heading"><div><p className="eyebrow accent-text">FRIDAY FOCUS</p><h1>Good morning, Alex.</h1><p className="heading-subtitle">Here is what deserves your attention today.</p></div><button className="text-button" type="button">View week <span>-&gt;</span></button></section>
         <section className="focus-section" aria-labelledby="focus-title"><div className="section-heading"><div><p className="eyebrow">WHAT MATTERS</p><h2 id="focus-title">Start with the RPL project</h2></div><span className="focus-badge">Recommended</span></div><div className="focus-content"><div><p className="focus-reason">It is due tomorrow and needs a little runway. Starting today keeps Wednesday from becoming too heavy.</p><div className="reason-list"><span><b className="reason-dot coral" />Due tomorrow</span><span><b className="reason-dot amber" />High effort</span><span><b className="reason-dot teal" />Schedule is filling up</span></div></div><button className="primary-button" type="button" onClick={() => setActiveView('Tasks')}>Start planning <span>-&gt;</span></button></div></section>
         <div className="content-grid"><section aria-labelledby="today-title"><div className="section-heading compact"><div><p className="eyebrow">TODAY</p><h2 id="today-title">Your day at a glance</h2></div><span className="muted-label">2 items</span></div><div className="schedule"><div className="schedule-row"><span className="schedule-time">10:00</span><span className="schedule-line" /><div><strong>RPL lecture</strong><span className="schedule-meta">Room B-204 <i>Class</i></span></div></div><div className="schedule-row"><span className="schedule-time">14:00</span><span className="schedule-line" /><div><strong>Group meeting</strong><span className="schedule-meta">Project discussion <i>Planned</i></span></div></div></div><form className="capture-form" onSubmit={handleCapture}><span className="capture-plus">+</span><input aria-label="Quick capture" value={capture} onChange={(event) => setCapture(event.target.value)} placeholder="Capture something for later..." /><button type="submit">Capture</button></form></section>

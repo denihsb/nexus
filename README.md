@@ -6,6 +6,8 @@ NEXUS is a student-first academic coordination system that turns scattered acade
 
 - [Pre-Development Architecture & UX Review](docs/pre-development-architecture-ux-review.md)
 - Supabase foundation migration: `supabase/migrations/001_foundation.sql`
+- Inbox migration: `supabase/migrations/002_inbox.sql`
+- Tasks migration: `supabase/migrations/003_tasks.sql`
 - Environment template: `.env.example`
 
 ## Local development
