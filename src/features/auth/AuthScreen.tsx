@@ -21,7 +21,14 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     try {
       const result = mode === 'login'
         ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password, options: { data: { display_name: displayName } } })
+        : await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              data: { display_name: displayName },
+              emailRedirectTo: window.location.origin,
+            },
+          })
       if (result.error) {
         console.error('Supabase authentication error:', result.error)
         const errorMessage = result.error.message.toLowerCase()
