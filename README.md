@@ -19,6 +19,32 @@ npm run dev
 
 The current foundation includes the responsive Today shell, quick capture prototype, and Supabase-aware authentication screen. Copy `.env.example` to `.env.local` and provide Supabase project values to enable login and signup.
 
+## Production deployment
+
+NEXUS is a Vite single-page application and is ready for Cloudflare Pages.
+
+- Build command: `npm run build`
+- Output directory: `dist`
+- Node version: 20 or newer
+- Required environment variables: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+
+The `public/_redirects` file keeps direct navigation and refreshes working for the SPA. Add the production domain to Supabase under **Authentication → URL Configuration**:
+
+- Site URL: the deployed NEXUS URL
+- Redirect URL: the deployed NEXUS URL
+
+Never add a Supabase `service_role` key to Cloudflare Pages or frontend environment variables.
+
+### Release smoke test
+
+1. Open the deployed URL and create a new account.
+2. Complete onboarding with one course and one task.
+3. Confirm the task appears in Today and Timeline.
+4. Create a capture from Tasks using the global `+` button and verify it appears in Inbox.
+5. Complete a task and verify Focus and Workload update.
+6. Test an overdue task with `Jadwalkan besok`.
+7. Refresh, log out, and log in again to confirm persistence.
+
 ## Final QA and live-backend checklist
 
 1. Confirm the `.env.local` values are valid for the target Supabase project.

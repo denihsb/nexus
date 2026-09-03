@@ -15,8 +15,8 @@ describe('AuthScreen', () => {
     render(<AuthScreen onAuthenticated={onAuthenticated} />)
 
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'student@nexus.test' } })
-    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } })
-    fireEvent.click(screen.getByRole('button', { name: /log in/i }))
+    fireEvent.change(screen.getByPlaceholderText('Masukkan password Anda'), { target: { value: 'password123' } })
+    fireEvent.click(screen.getByRole('button', { name: /masuk/i }))
 
     expect(onAuthenticated).toHaveBeenCalledTimes(1)
   })

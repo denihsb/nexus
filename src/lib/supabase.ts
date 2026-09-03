@@ -9,8 +9,8 @@ export const supabaseProjectRef = isSupabaseConfigured
   : null
 
 export const supabaseStatusLabel = isSupabaseConfigured
-  ? `Supabase project detected: ${supabaseProjectRef ?? 'live project'}`
-  : 'Supabase is not configured yet.'
+  ? `Project Supabase terhubung: ${supabaseProjectRef ?? 'project live'}`
+  : 'Supabase belum dikonfigurasi.'
 
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey, {
