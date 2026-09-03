@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { buildFocusSuggestion } from "./domain/priority";
 import { computeDailyWorkload } from "./domain/workload";
+import { useTheme } from "./lib/useTheme";
 import { AuthScreen } from "./features/auth/AuthScreen";
 import { CoursesPage } from "./features/courses/CoursesPage";
 import { InboxPage } from "./features/inbox/InboxPage";
@@ -52,6 +53,7 @@ function calendarDate(value: string) {
 }
 
 function App() {
+  const { theme, toggleTheme } = useTheme();
   const [isAuthenticated, setIsAuthenticated] = useState(() =>
     !supabase ? isDemoAuthenticated() : false,
   );
@@ -416,6 +418,25 @@ function App() {
                 ? "Tersinkron dengan akun Anda"
                 : "Minggu Anda mulai terbentuk · Ruang demo"}
             </span>
+          </div>
+          <div className="topbar-actions">
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={toggleTheme}
+              aria-label={
+                theme === "dark"
+                  ? "Ganti ke mode terang"
+                  : "Ganti ke mode gelap"
+              }
+              title={
+                theme === "dark"
+                  ? "Ganti ke mode terang"
+                  : "Ganti ke mode gelap"
+              }
+            >
+              {theme === "dark" ? "☀" : "☾"}
+            </button>
           </div>
         </header>
         {isQuickCaptureOpen && (
