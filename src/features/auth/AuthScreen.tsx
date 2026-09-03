@@ -1,9 +1,13 @@
 import { useState } from 'react'
-import { isSupabaseConfigured, supabase } from '../../lib/supabase'
+import { persistDemoAuthentication } from '../../lib/demoStore'
+import { isSupabaseConfigured, supabase, supabaseStatusLabel } from '../../lib/supabase'
 
 type AuthMode = 'login' | 'signup'
 
 type AuthScreenProps = { onAuthenticated: () => void }
+
+const DEMO_EMAIL = 'student@nexus.test'
+const DEMO_PASSWORD = 'password123'
 
 export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const [mode, setMode] = useState<AuthMode>('login')
@@ -12,10 +16,22 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const [displayName, setDisplayName] = useState('')
   const [message, setMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!supabase) return
+    if (!supabase) {
+      if (email.trim().toLowerCase() === DEMO_EMAIL && password === DEMO_PASSWORD) {
+        persistDemoAuthentication(true)
+        onAuthenticated()
+        return
+      }
+
+      const demoHint = `Demo mode is active. Use ${DEMO_EMAIL} / ${DEMO_PASSWORD} or configure Supabase in .env.local.`
+      setMessage(demoHint)
+      return
+    }
+
     setIsSubmitting(true)
     setMessage('')
     try {
@@ -33,29 +49,29 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         console.error('Supabase authentication error:', result.error)
         const errorMessage = result.error.message.toLowerCase()
         if (errorMessage.includes('already registered') || errorMessage.includes('already been registered')) {
-          setMessage('This email is already registered. Try logging in instead.')
+          setMessage('Email ini sudah terdaftar. Silakan masuk.')
         } else if (errorMessage.includes('password')) {
-          setMessage('Your password does not meet the current requirements. Use a stronger password and try again.')
+          setMessage('Kata sandi belum memenuhi syarat. Gunakan kata sandi yang lebih kuat.')
         } else if (errorMessage.includes('email')) {
-          setMessage('Please check that your email address is valid and try again.')
+          setMessage('Periksa kembali alamat email Anda.')
         } else {
-          setMessage('Authentication is unavailable right now. Check the browser console for setup details.')
+          setMessage('Layanan masuk sedang tidak tersedia. Silakan coba lagi.')
         }
         return
       }
       if (mode === 'signup' && !result.data.session) {
-        setMessage('Account created. Check your email to confirm your account, then log in.')
+        setMessage('Akun berhasil dibuat. Periksa email untuk konfirmasi, lalu masuk.')
         setMode('login')
         return
       }
       onAuthenticated()
     } catch (error) {
       console.error('Unexpected authentication error:', error)
-      setMessage('Could not reach Supabase. Check your project URL, anon key, and network connection.')
+      setMessage('Tidak dapat terhubung ke layanan. Periksa koneksi internet Anda.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  return <main className="auth-page"><div className="auth-panel"><div className="brand"><span className="brand-mark">+</span><span>NEXUS</span></div><p className="eyebrow accent-text">ACADEMIC CLARITY</p><h1>{mode === 'login' ? 'Welcome back.' : 'Make sense of your week.'}</h1><p className="auth-intro">Your academic responsibilities, in one calm place.</p>{!isSupabaseConfigured ? <div className="setup-message"><strong>Supabase is not connected yet.</strong><span>Add the values from <code>.env.example</code> to start authentication.</span></div> : <form className="auth-form" onSubmit={handleSubmit}>{mode === 'signup' && <label>Name<input required value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>}<label>Email<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Password<input required minLength={6} type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>{message && <p className="auth-message" role="status">{message}</p>}<button className="primary-button" disabled={isSubmitting} type="submit">{isSubmitting ? 'Working...' : mode === 'login' ? 'Log in' : 'Create account'} <span>-&gt;</span></button></form>}<button className="auth-switch" type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setMessage('') }}>{mode === 'login' ? 'Need an account? Sign up' : 'Already have an account? Log in'}</button></div></main>
+  return <main className="auth-page"><div className="auth-panel"><div className="brand"><span className="brand-mark">+</span><span>NEXUS</span></div><p className="eyebrow accent-text">ACADEMIC CLARITY</p><h1>{mode === 'login' ? 'Welcome back.' : 'Make sense of your week.'}</h1><p className="auth-intro">Your academic responsibilities, in one calm place.</p>{isSupabaseConfigured ? <div className="setup-message"><strong>{supabaseStatusLabel}</strong><span>Live auth is enabled. If the database tables are not yet migrated, the app will continue with demo-safe fallback until the schema is ready.</span></div> : <div className="setup-message"><strong>Supabase is not connected yet.</strong><span>Add the values from <code>.env.example</code> to start authentication, or use the demo account below.</span></div>}<form className="auth-form" onSubmit={handleSubmit}>{mode === 'signup' && <label>Name<input required value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Masukkan nama lengkap" /></label>}<label>Email<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="contoh: student@nexus.test" /></label><label className="password-field"><span>Password</span><div className="password-input-wrap"><input required minLength={6} type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Masukkan password Anda" /><button type="button" className="password-toggle" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}>{showPassword ? 'Hide' : 'Show'}</button></div></label>{message && <p className="auth-message" role="status">{message}</p>}<button className="primary-button" disabled={isSubmitting} type="submit">{isSubmitting ? 'Working...' : mode === 'login' ? 'Log in' : 'Create account'} <span>-&gt;</span></button>{!isSupabaseConfigured && <p className="auth-message" role="note">Demo login: {DEMO_EMAIL} / {DEMO_PASSWORD}</p>}</form><button className="auth-switch" type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setMessage(''); setShowPassword(false) }}>{mode === 'login' ? 'Need an account? Sign up' : 'Already have an account? Log in'}</button></div></main>
 }

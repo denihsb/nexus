@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { getDemoCourses, isMissingSupabaseTableError, setDemoCourses } from '../../lib/demoStore'
 import { supabase } from '../../lib/supabase'
 
 export type Course = {
@@ -27,16 +28,31 @@ export function CoursesPage() {
 
   useEffect(() => {
     let isMounted = true
-    if (!supabase) return
+    if (!supabase) {
+      const demoCourses = getDemoCourses<Course[]>([]).filter((course) => !course.is_archived)
+      if (isMounted) {
+        setCourses(demoCourses)
+        setIsLoading(false)
+      }
+      return () => { isMounted = false }
+    }
+
     supabase.from('courses').select('*').eq('is_archived', false).order('created_at', { ascending: true }).then(({ data, error }) => {
       if (!isMounted) return
       setIsLoading(false)
       if (error) {
         console.error('Course loading error:', error)
+        if (isMissingSupabaseTableError(error)) {
+          const demoCourses = getDemoCourses<Course[]>([]).filter((course) => !course.is_archived)
+          setCourses(demoCourses)
+          setMessage('Demo data is active because the Supabase schema is not ready yet.')
+          return
+        }
         setMessage('Could not load your courses. Check your connection and try again.')
         return
       }
       setCourses(data as Course[])
+      setDemoCourses(data as Course[])
     })
     return () => { isMounted = false }
   }, [])
@@ -57,10 +73,31 @@ export function CoursesPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!supabase || !draft.name.trim()) return
+    if (!draft.name.trim()) return
     setIsSaving(true)
     setMessage('')
     const values = { name: draft.name.trim(), code: draft.code.trim().toUpperCase(), color_token: draft.color_token }
+
+    if (!supabase) {
+      const savedCourse: Course = editingCourse ? { ...editingCourse, ...values, updated_at: new Date().toISOString() } : {
+        id: crypto.randomUUID(),
+        user_id: 'demo-user',
+        name: values.name,
+        code: values.code,
+        color_token: values.color_token,
+        is_archived: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      const nextCourses = editingCourse ? courses.map((course) => course.id === editingCourse.id ? savedCourse : course) : [...courses, savedCourse]
+      setCourses(nextCourses)
+      setDemoCourses(nextCourses)
+      setIsSaving(false)
+      setIsFormOpen(false)
+      setDraft(emptyDraft)
+      return
+    }
+
     let result
     if (editingCourse) {
       result = await supabase.from('courses').update(values).eq('id', editingCourse.id).select().single()
@@ -85,7 +122,14 @@ export function CoursesPage() {
   }
 
   async function archiveCourse(course: Course) {
-    if (!supabase || !window.confirm(`Archive ${course.name}?`)) return
+    if (!window.confirm(`Archive ${course.name}?`)) return
+    if (!supabase) {
+      const nextCourses = courses.filter((item) => item.id !== course.id)
+      setCourses(nextCourses)
+      setDemoCourses(nextCourses)
+      return
+    }
+
     const { error } = await supabase.from('courses').update({ is_archived: true }).eq('id', course.id)
     if (error) {
       console.error('Course archive error:', error)

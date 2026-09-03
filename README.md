@@ -19,6 +19,14 @@ npm run dev
 
 The current foundation includes the responsive Today shell, quick capture prototype, and Supabase-aware authentication screen. Copy `.env.example` to `.env.local` and provide Supabase project values to enable login and signup.
 
+## Final QA and live-backend checklist
+
+1. Confirm the `.env.local` values are valid for the target Supabase project.
+2. Apply the SQL in `supabase/migrations/001_foundation.sql`, `002_inbox.sql`, and `003_tasks.sql` to the project database.
+3. In the Supabase dashboard, verify that the `profiles`, `courses`, `inbox_items`, and `tasks` tables exist and RLS is enabled.
+4. Sign in once with a real user to confirm the auth session and live data path work end-to-end.
+5. If the schema is still missing, the app will remain in demo-safe fallback mode until the migration is applied.
+
 ## Planned checks
 
 ```bash

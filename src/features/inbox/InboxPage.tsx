@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { getDemoInbox, isMissingSupabaseTableError, setDemoInbox } from '../../lib/demoStore'
 import { supabase } from '../../lib/supabase'
 
 export type InboxItem = {
@@ -21,17 +22,34 @@ export function InboxPage({ onCountChange, onContextualize }: InboxPageProps) {
 
   useEffect(() => {
     let isMounted = true
-    if (!supabase) return
+    if (!supabase) {
+      const nextItems = getDemoInbox<InboxItem[]>([]).filter((item) => item.status === 'unprocessed')
+      if (isMounted) {
+        setItems(nextItems)
+        setIsLoading(false)
+        onCountChange?.(nextItems.length)
+      }
+      return () => { isMounted = false }
+    }
+
     supabase.from('inbox_items').select('*').eq('status', 'unprocessed').order('captured_at', { ascending: false }).then(({ data, error }) => {
       if (!isMounted) return
       setIsLoading(false)
       if (error) {
         console.error('Inbox loading error:', error)
+        if (isMissingSupabaseTableError(error)) {
+          const nextItems = getDemoInbox<InboxItem[]>([]).filter((item) => item.status === 'unprocessed')
+          setItems(nextItems)
+          onCountChange?.(nextItems.length)
+          setMessage('Demo data is active because the Supabase schema is not ready yet.')
+          return
+        }
         setMessage('Could not load your inbox. Check your connection and try again.')
         return
       }
       const nextItems = data as InboxItem[]
       setItems(nextItems)
+      setDemoInbox(nextItems)
       onCountChange?.(nextItems.length)
     })
     return () => { isMounted = false }
@@ -39,11 +57,28 @@ export function InboxPage({ onCountChange, onContextualize }: InboxPageProps) {
 
   async function handleCapture(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!supabase) return
     const rawText = capture.trim()
     if (!rawText) return
     setIsSaving(true)
     setMessage('')
+
+    if (!supabase) {
+      const nextItems = [{
+        id: crypto.randomUUID(),
+        user_id: 'demo-user',
+        raw_text: rawText,
+        status: 'unprocessed',
+        captured_at: new Date().toISOString(),
+        processed_at: null,
+      } as InboxItem, ...items]
+      setItems(nextItems)
+      setDemoInbox(nextItems)
+      onCountChange?.(nextItems.length)
+      setCapture('')
+      setIsSaving(false)
+      return
+    }
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setIsSaving(false)
@@ -64,7 +99,14 @@ export function InboxPage({ onCountChange, onContextualize }: InboxPageProps) {
   }
 
   async function updateItem(id: string, status: 'processed' | 'archived') {
-    if (!supabase) return
+    if (!supabase) {
+      const nextItems = items.filter((item) => item.id !== id).map((item) => item.id === id ? { ...item, status, processed_at: status === 'processed' ? new Date().toISOString() : item.processed_at } : item)
+      setItems(nextItems.filter((item) => item.status === 'unprocessed'))
+      setDemoInbox(nextItems)
+      onCountChange?.(nextItems.filter((item) => item.status === 'unprocessed').length)
+      return
+    }
+
     const values = status === 'processed' ? { status, processed_at: new Date().toISOString() } : { status }
     const { error } = await supabase.from('inbox_items').update(values).eq('id', id)
     if (error) {
