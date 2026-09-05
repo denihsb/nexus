@@ -12,9 +12,7 @@ import type { InboxItem } from "./features/inbox/InboxPage";
 import type { Task } from "./features/tasks/TasksPage";
 import {
   getDemoInbox,
-  isDemoAuthenticated,
   isMissingSupabaseTableError,
-  persistDemoAuthentication,
   setDemoInbox,
 } from "./lib/demoStore";
 import { supabase } from "./lib/supabase";
@@ -54,17 +52,13 @@ function calendarDate(value: string) {
 
 function App() {
   const { theme, toggleTheme } = useTheme();
-  const [isAuthenticated, setIsAuthenticated] = useState(() =>
-    !supabase ? isDemoAuthenticated() : false,
-  );
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeView, setActiveView] = useState<View>("Today");
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
   const [recommendationIndex, setRecommendationIndex] = useState(0);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
-  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(
-    Boolean(supabase),
-  );
+  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(false);
   const [userId, setUserId] = useState("");
   const [contextualizingItem, setContextualizingItem] =
     useState<InboxItem | null>(null);
@@ -187,21 +181,39 @@ function App() {
 
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => {
-      setIsAuthenticated(Boolean(data.session));
-      if (data.session?.user) {
-        setUserId(data.session.user.id);
-        setProfileName(
-          data.session.user.user_metadata?.display_name ||
-            data.session.user.email?.split("@")[0] ||
-            "",
-        );
+    let isMounted = true;
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!isMounted) return;
+      if (error) {
+        console.error("Session initialization failed", { code: error.code });
+        setIsAuthenticated(false);
+        return;
       }
+      const session = data.session;
+      setIsAuthenticated(Boolean(session));
+      setUserId(session?.user.id ?? "");
+      setProfileName(
+        session?.user.user_metadata?.display_name ||
+          session?.user.email?.split("@")[0] ||
+          "",
+      );
     });
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => setIsAuthenticated(Boolean(session)),
+      (_event, session) => {
+        if (!isMounted) return;
+        setIsAuthenticated(Boolean(session));
+        setUserId(session?.user.id ?? "");
+        setProfileName(
+          session?.user.user_metadata?.display_name ||
+            session?.user.email?.split("@")[0] ||
+            "",
+        );
+      },
     );
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -292,7 +304,6 @@ function App() {
     return (
       <AuthScreen
         onAuthenticated={() => {
-          persistDemoAuthentication(true);
           setIsAuthenticated(true);
         }}
       />
@@ -321,8 +332,9 @@ function App() {
     if (supabase) {
       await supabase.auth.signOut();
     }
-    persistDemoAuthentication(false);
     setIsAuthenticated(false);
+    setUserId("");
+    setProfileName("");
     setActiveView("Today");
     setContextualizingItem(null);
     setCapture("");
@@ -416,7 +428,7 @@ function App() {
             <span className="live-dot">
               {isLiveData
                 ? "Tersinkron dengan akun Anda"
-                : "Minggu Anda mulai terbentuk · Ruang demo"}
+                : "Menunggu sinkronisasi akun"}
             </span>
           </div>
           <div className="topbar-actions">

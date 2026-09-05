@@ -1,17 +1,10 @@
 import { useState } from "react";
-import { persistDemoAuthentication } from "../../lib/demoStore";
-import {
-  isSupabaseConfigured,
-  supabase,
-  supabaseStatusLabel,
-} from "../../lib/supabase";
+import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 
 type AuthMode = "login" | "signup";
 
 type AuthScreenProps = { onAuthenticated: () => void };
 
-const DEMO_EMAIL = "student@nexus.test";
-const DEMO_PASSWORD = "password123";
 
 export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const [mode, setMode] = useState<AuthMode>("login");
@@ -25,17 +18,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase) {
-      if (
-        email.trim().toLowerCase() === DEMO_EMAIL &&
-        password === DEMO_PASSWORD
-      ) {
-        persistDemoAuthentication(true);
-        onAuthenticated();
-        return;
-      }
-
-      const demoHint = `Demo mode is active. Use ${DEMO_EMAIL} / ${DEMO_PASSWORD} or configure Supabase in .env.local.`;
-      setMessage(demoHint);
+      setMessage("Layanan masuk belum siap. Silakan coba lagi nanti.");
       return;
     }
 
@@ -54,7 +37,10 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
               },
             });
       if (result.error) {
-        console.error("Supabase authentication error:", result.error);
+        console.error("Authentication request failed", {
+          status: result.error.status,
+          code: result.error.code,
+        });
         const errorMessage = result.error.message.toLowerCase();
         if (
           errorMessage.includes("already registered") ||
@@ -81,7 +67,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
       }
       onAuthenticated();
     } catch (error) {
-      console.error("Unexpected authentication error:", error);
+      console.error("Unexpected authentication error", error instanceof Error ? error.name : "unknown");
       setMessage(
         "Tidak dapat terhubung ke layanan. Periksa koneksi internet Anda.",
       );
@@ -104,22 +90,18 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         <p className="auth-intro">
           Semua tanggung jawab akademikmu, dalam satu ruang yang tenang.
         </p>
-        {isSupabaseConfigured ? (
-          <div className="setup-message">
-            <strong>{supabaseStatusLabel}</strong>
-            <span>
-              Ruang akademikmu siap digunakan.
-            </span>
-          </div>
-        ) : (
-          <div className="setup-message">
-            <strong>Supabase is not connected yet.</strong>
-            <span>
-              Add the values from <code>.env.example</code> to start
-              authentication, or use the demo account below.
-            </span>
-          </div>
-        )}
+        <div className="setup-message">
+          <strong>
+            {isSupabaseConfigured
+              ? "Ruang akademikmu siap digunakan."
+              : "Layanan masuk sedang disiapkan."}
+          </strong>
+          <span>
+            {isSupabaseConfigured
+              ? "Masuk untuk melanjutkan ke ruang akademikmu."
+              : "Silakan coba lagi nanti atau hubungi administrator aplikasi."}
+          </span>
+        </div>
         <form className="auth-form" onSubmit={handleSubmit}>
           {mode === "signup" && (
             <label>
@@ -172,7 +154,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           )}
           <button
             className="primary-button"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !isSupabaseConfigured}
             type="submit"
           >
             {isSubmitting
@@ -182,11 +164,6 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                 : "Buat akun"}{" "}
             <span>-&gt;</span>
           </button>
-          {!isSupabaseConfigured && (
-            <p className="auth-message" role="note">
-              Login demo: {DEMO_EMAIL} / {DEMO_PASSWORD}
-            </p>
-          )}
         </form>
         <button
           className="auth-switch"

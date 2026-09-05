@@ -1,19 +1,16 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim()
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim()
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
-export const supabaseProjectRef = isSupabaseConfigured
-  ? new URL(supabaseUrl).hostname.replace(/\.supabase\.co$/, '')
-  : null
-
-export const supabaseStatusLabel = isSupabaseConfigured
-  ? `Project Supabase terhubung: ${supabaseProjectRef ?? 'project live'}`
-  : 'Supabase belum dikonfigurasi.'
 
 export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  ? createClient(supabaseUrl as string, supabaseAnonKey as string, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
     })
   : null

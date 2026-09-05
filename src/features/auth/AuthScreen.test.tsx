@@ -9,21 +9,23 @@ vi.mock('../../lib/supabase', () => ({
 import { AuthScreen } from './AuthScreen'
 
 describe('AuthScreen', () => {
-  it('allows a demo login when Supabase is not configured', () => {
+  it('does not authenticate when Supabase is unavailable', () => {
     const onAuthenticated = vi.fn()
 
     render(<AuthScreen onAuthenticated={onAuthenticated} />)
 
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'student@nexus.test' } })
     fireEvent.change(screen.getByPlaceholderText('Masukkan password Anda'), { target: { value: 'password123' } })
-    fireEvent.click(screen.getByRole('button', { name: /masuk/i }))
+    expect(screen.getByRole('button', { name: /masuk/i })).toBeDisabled()
 
-    expect(onAuthenticated).toHaveBeenCalledTimes(1)
+    expect(onAuthenticated).not.toHaveBeenCalled()
   })
 
-  it('shows placeholder guidance and toggles password visibility', () => {
+  it('shows neutral unavailable guidance and toggles password visibility', () => {
     render(<AuthScreen onAuthenticated={vi.fn()} />)
 
+    expect(screen.getByText('Layanan masuk sedang disiapkan.')).toBeInTheDocument()
+    expect(screen.queryByText(/project|demo|\.env/i)).not.toBeInTheDocument()
     expect(screen.getByPlaceholderText('contoh: student@nexus.test')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Masukkan password Anda')).toBeInTheDocument()
 
