@@ -32,3 +32,4 @@ $$;
 create or replace trigger tasks_validate_relation_ownership
 before insert or update of user_id, course_id, inbox_item_id on public.tasks
 for each row execute function public.validate_task_relation_ownership();
+
