@@ -22,6 +22,7 @@ import { supabase } from "./lib/supabase";
 import { enqueueCapture, flushCaptureQueue } from "./lib/offlineQueue";
 import "./App.css";
 import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 type View =
   | "Today"
@@ -1066,6 +1067,7 @@ function App() {
         )}
       </nav>
       <Analytics />
+      <SpeedInsights />
       <PwaUpdateNotice />
     </div>
   );
