@@ -216,14 +216,9 @@
 .brand-mark {
   width: 25px;
   height: 25px;
-  display: grid;
-  place-items: center;
-  color: white;
-  background: var(--teal);
-  border-radius: 7px;
-  font-size: 21px;
-  font-weight: 400;
-  line-height: 1;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 .workspace-label,
 .eyebrow {

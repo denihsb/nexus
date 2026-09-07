@@ -80,7 +80,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     <main className="auth-page">
       <div className="auth-panel">
         <div className="brand">
-          <span className="brand-mark">+</span>
+          <img src="/nexus-logo.png" alt="" className="brand-mark" />
           <span>NEXUS</span>
         </div>
         <p className="eyebrow accent-text">ACADEMIC CLARITY</p>

@@ -461,7 +461,7 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">+</span>
+          <img src="/nexus-logo.png" alt="" className="brand-mark" />
           <span>NEXUS</span>
         </div>
         <div className="workspace-label">RUANG AKADEMIK SAYA</div>
@@ -500,7 +500,8 @@ function App() {
       <main className="main-content">
         <header className="topbar">
           <div className="mobile-brand">
-            <span className="brand-mark">+</span>NEXUS
+            <img src="/nexus-logo.png" alt="" className="brand-mark" />
+            NEXUS
           </div>
           <div className="date-context">
             <span className="eyebrow">{todayLabel}</span>
