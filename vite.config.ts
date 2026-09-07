@@ -37,6 +37,28 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        // Only GET reads to Supabase's REST API are cached. Writes
+        // (insert/update/delete) always go straight to the network so they
+        // never get silently served a cached response — offline writes are
+        // handled separately by the capture queue in src/lib/offlineQueue.ts.
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/[^/]+\.supabase\.co\/rest\/v1\/.*/,
+            method: 'GET',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'nexus-supabase-data',
+              networkTimeoutSeconds: 4,
+              expiration: {
+                maxEntries: 80,
+                maxAgeSeconds: 60 * 60 * 24,
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+        ],
       },
     }),
   ],

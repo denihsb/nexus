@@ -19,6 +19,7 @@ import {
   setDemoInbox,
 } from "./lib/demoStore";
 import { supabase } from "./lib/supabase";
+import { enqueueCapture, flushCaptureQueue } from "./lib/offlineQueue";
 import "./App.css";
 
 type View =
@@ -78,8 +79,7 @@ function App() {
   );
   const [inboxCount, setInboxCount] = useState(() =>
     !supabase ? getDemoInbox<InboxItem[]>([]).length : 0,
-  );
-  const [profileName, setProfileName] = useState("");
+  );  const [profileName, setProfileName] = useState("");
   const [liveTasks, setLiveTasks] = useState<Task[]>([]);
   const [isLiveData, setIsLiveData] = useState(Boolean(supabase));
   const openTasks = liveTasks.filter((task) => task.status === "open");
@@ -191,6 +191,15 @@ function App() {
     openTasks.length === 0
       ? "Minggu ini masih longgar. Istirahatlah, pelajari hal baru, atau siapkan minggu depan dengan tenang."
       : `Ada ${openTasks.length} ${openTasks.length === 1 ? "tugas terbuka" : "tugas terbuka"}. Kerjakan langkah kecil berikutnya dan jaga fokus Anda.`;
+
+  useEffect(() => {
+    if (!supabase || !isOnline) return;
+    // Optimistic counts were already applied when each item was queued
+    // (offline or online-with-a-network-hiccup), so a successful flush here
+    // just persists them to the database — it must not touch inboxCount
+    // again, or a synced item would be counted twice.
+    flushCaptureQueue(supabase);
+  }, [isOnline]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -377,10 +386,6 @@ function App() {
       return;
     }
     setCaptureError("");
-    if (!isOnline && supabase) {
-      setCaptureError("Anda sedang offline. Tersambung kembali untuk menyimpan.");
-      return;
-    }
 
     if (!supabase) {
       const items = getDemoInbox<InboxItem[]>([]);
@@ -400,19 +405,51 @@ function App() {
       return;
     }
 
+    // getSession() reads the persisted session from local storage and does
+    // not itself require a network round-trip, so it still works offline.
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) {
       setCaptureError("Sesi Anda berakhir. Silakan masuk kembali.");
       return;
     }
-    const { error } = await supabase
-      .from("inbox_items")
-      .insert({ raw_text: value, user_id: user.id });
-    if (error) {
-      console.error("Today capture error", { code: error.code });
-      setCaptureError("Catatan tidak dapat disimpan. Periksa koneksi lalu coba lagi.");
+
+    const queuedItem = {
+      localId: crypto.randomUUID(),
+      raw_text: value,
+      user_id: user.id,
+      captured_at: new Date().toISOString(),
+    };
+
+    if (!isOnline) {
+      enqueueCapture(queuedItem);
+      setInboxCount((count) => count + 1);
+      closeQuickCapture();
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("inbox_items")
+        .insert({ raw_text: value, user_id: user.id });
+      if (error) {
+        console.error("Today capture error", { code: error.code });
+        // navigator.onLine can be a false positive (connected to a router
+        // with no real internet), so a failed insert while "online" still
+        // gets queued rather than shown as a hard failure — the queue's own
+        // connectivity check drops it later if it turns out to be a real
+        // rejection rather than a network hiccup.
+        enqueueCapture(queuedItem);
+        setInboxCount((count) => count + 1);
+        closeQuickCapture();
+        return;
+      }
+    } catch {
+      enqueueCapture(queuedItem);
+      setInboxCount((count) => count + 1);
+      closeQuickCapture();
       return;
     }
     setInboxCount((count) => count + 1);
@@ -467,7 +504,7 @@ function App() {
             <span className="eyebrow">{todayLabel}</span>
             <span className={`live-dot${!isOnline && isLiveData ? " offline" : ""}`} role="status" aria-live="polite">
               {!isOnline && isLiveData
-                ? "Offline · perubahan belum tentu tersimpan"
+                ? "Offline · catatan baru tetap tersimpan, aksi lain menunggu koneksi"
                 : isLiveData
                   ? "Tersinkron dengan akun Anda"
                   : "Menunggu sinkronisasi akun"}
@@ -536,7 +573,7 @@ function App() {
                 )}
                 {!isOnline && supabase && !captureError && (
                   <p className="form-hint" role="status">
-                    Anda sedang offline. Tersambung kembali untuk menyimpan.
+                    Anda sedang offline. Catatan akan tersimpan di perangkat ini dan disinkron otomatis saat online.
                   </p>
                 )}
                 <div className="modal-actions">

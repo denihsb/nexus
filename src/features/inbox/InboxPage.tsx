@@ -4,6 +4,8 @@ import {
   isMissingSupabaseTableError,
   setDemoInbox,
 } from "../../lib/demoStore";
+import { enqueueCapture } from "../../lib/offlineQueue";
+import { useOnlineStatus } from "../../lib/useOnlineStatus";
 import { supabase } from "../../lib/supabase";
 
 export type InboxItem = {
@@ -21,6 +23,7 @@ type InboxPageProps = {
 };
 
 export function InboxPage({ onCountChange, onContextualize }: InboxPageProps) {
+  const isOnline = useOnlineStatus();
   const [items, setItems] = useState<InboxItem[]>([]);
   const [capture, setCapture] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -107,30 +110,67 @@ export function InboxPage({ onCountChange, onContextualize }: InboxPageProps) {
     }
 
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) {
       setIsSaving(false);
       setMessage("Sesi Anda berakhir. Silakan masuk kembali.");
       return;
     }
-    const { data, error } = await supabase
-      .from("inbox_items")
-      .insert({ raw_text: rawText, user_id: user.id })
-      .select()
-      .single();
-    setIsSaving(false);
-    if (error) {
-      console.error("Inbox capture error:", error);
+
+    function queueLocally() {
+      enqueueCapture({
+        localId: crypto.randomUUID(),
+        raw_text: rawText,
+        user_id: user!.id,
+        captured_at: new Date().toISOString(),
+      });
+      const optimisticItem: InboxItem = {
+        id: crypto.randomUUID(),
+        user_id: user!.id,
+        raw_text: rawText,
+        status: "unprocessed",
+        captured_at: new Date().toISOString(),
+        processed_at: null,
+      };
+      const nextItems = [optimisticItem, ...items];
+      setItems(nextItems);
+      onCountChange?.(nextItems.length);
+      setCapture("");
+      setIsSaving(false);
       setMessage(
-        "Catatan tidak dapat disimpan. Periksa koneksi lalu coba lagi.",
+        "Tersambung lagi nanti, catatan ini akan otomatis disinkron.",
       );
+    }
+
+    if (!isOnline) {
+      queueLocally();
       return;
     }
-    const nextItems = [data as InboxItem, ...items];
-    setItems(nextItems);
-    onCountChange?.(nextItems.length);
-    setCapture("");
+
+    try {
+      const { data, error } = await supabase
+        .from("inbox_items")
+        .insert({ raw_text: rawText, user_id: user.id })
+        .select()
+        .single();
+      if (error) {
+        console.error("Inbox capture error:", error);
+        // Could be a real rejection or just a flaky connection despite
+        // navigator.onLine — queue it rather than losing the note; the
+        // queue itself drops it later if it turns out to be permanent.
+        queueLocally();
+        return;
+      }
+      setIsSaving(false);
+      const nextItems = [data as InboxItem, ...items];
+      setItems(nextItems);
+      onCountChange?.(nextItems.length);
+      setCapture("");
+    } catch {
+      queueLocally();
+    }
   }
 
   async function updateItem(id: string, status: "processed" | "archived") {
