@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useModalA11y } from "../../lib/useModalA11y";
 import {
   getDemoCourses,
   getDemoTasks,
@@ -77,9 +78,14 @@ export function TasksPage({
   const [draft, setDraft] = useState<TaskDraft>(emptyDraft);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const taskModalRef = useModalA11y<HTMLDivElement>(isFormOpen, () =>
+    setIsFormOpen(false),
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -100,6 +106,9 @@ export function TasksPage({
       };
     }
 
+    setIsLoading(true);
+    setLoadError(false);
+
     Promise.all([
       supabase
         .from("tasks")
@@ -111,37 +120,46 @@ export function TasksPage({
         .select("*")
         .eq("is_archived", false)
         .order("name"),
-    ]).then(([taskResult, courseResult]) => {
-      if (!isMounted) return;
-      setIsLoading(false);
-      if (taskResult.error || courseResult.error) {
-        const missingTableError = taskResult.error ?? courseResult.error;
-        console.error("Task loading error:", missingTableError);
-        if (isMissingSupabaseTableError(missingTableError)) {
-          const demoTasks = getDemoTasks<Task[]>([]).filter(
-            (task) => task.status === "open",
-          );
-          const demoCourses = getDemoCourses<Course[]>([]).filter(
-            (course) => !course.is_archived,
-          );
-          setTasks(demoTasks);
-          setCourses(demoCourses);
-          setMessage(
-            "Data sementara aktif karena struktur database belum siap.",
-          );
+    ])
+      .then(([taskResult, courseResult]) => {
+        if (!isMounted) return;
+        setIsLoading(false);
+        if (taskResult.error || courseResult.error) {
+          const missingTableError = taskResult.error ?? courseResult.error;
+          console.error("Task loading error:", missingTableError);
+          if (isMissingSupabaseTableError(missingTableError)) {
+            const demoTasks = getDemoTasks<Task[]>([]).filter(
+              (task) => task.status === "open",
+            );
+            const demoCourses = getDemoCourses<Course[]>([]).filter(
+              (course) => !course.is_archived,
+            );
+            setTasks(demoTasks);
+            setCourses(demoCourses);
+            setMessage(
+              "Data sementara aktif karena struktur database belum siap.",
+            );
+            return;
+          }
+          setLoadError(true);
+          setMessage("Tugas tidak dapat dimuat. Periksa koneksi lalu coba lagi.");
           return;
         }
-        setMessage("Tugas tidak dapat dimuat. Periksa koneksi lalu coba lagi.");
-        return;
-      }
-      setTasks(taskResult.data as Task[]);
-      setCourses(courseResult.data as Course[]);
-      setDemoTasks(taskResult.data as Task[]);
-    });
+        setTasks(taskResult.data as Task[]);
+        setCourses(courseResult.data as Course[]);
+        setDemoTasks(taskResult.data as Task[]);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        console.error("Task loading error (network):", error);
+        setIsLoading(false);
+        setLoadError(true);
+        setMessage("Tidak dapat terhubung ke layanan. Periksa koneksi internet Anda.");
+      });
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   function openCreateForm(item?: InboxItem) {
     setEditingTask(null);
@@ -339,6 +357,15 @@ export function TasksPage({
       {message && (
         <div className="course-message" role="alert">
           {message}
+          {loadError && (
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => setReloadKey((key) => key + 1)}
+            >
+              Coba lagi
+            </button>
+          )}
         </div>
       )}
       {isLoading ? (
@@ -426,10 +453,12 @@ export function TasksPage({
       {isFormOpen && (
         <div className="modal-backdrop" role="presentation">
           <div
+            ref={taskModalRef}
             className="course-modal task-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="task-form-title"
+            tabIndex={-1}
           >
             <div className="section-heading">
               <div>
@@ -442,7 +471,7 @@ export function TasksPage({
                 className="modal-close"
                 type="button"
                 onClick={() => setIsFormOpen(false)}
-                aria-label="Close"
+                aria-label="Tutup"
               >
                 x
               </button>

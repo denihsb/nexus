@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { buildFocusSuggestion } from "./domain/priority";
 import { computeDailyWorkload } from "./domain/workload";
 import { useTheme } from "./lib/useTheme";
+import { useModalA11y } from "./lib/useModalA11y";
+import { useOnlineStatus } from "./lib/useOnlineStatus";
+import { PwaUpdateNotice } from "./components/PwaUpdateNotice";
 import { AuthScreen } from "./features/auth/AuthScreen";
 import { CoursesPage } from "./features/courses/CoursesPage";
 import { InboxPage } from "./features/inbox/InboxPage";
@@ -52,6 +55,7 @@ function calendarDate(value: string) {
 
 function App() {
   const { theme, toggleTheme } = useTheme();
+  const isOnline = useOnlineStatus();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeView, setActiveView] = useState<View>("Today");
   const [isMoreOpen, setIsMoreOpen] = useState(false);
@@ -63,6 +67,15 @@ function App() {
   const [contextualizingItem, setContextualizingItem] =
     useState<InboxItem | null>(null);
   const [capture, setCapture] = useState("");
+  const [captureError, setCaptureError] = useState("");
+  const quickCaptureRef = useModalA11y<HTMLDivElement>(
+    isQuickCaptureOpen,
+    () => {
+      setIsQuickCaptureOpen(false);
+      setCapture("");
+      setCaptureError("");
+    },
+  );
   const [inboxCount, setInboxCount] = useState(() =>
     !supabase ? getDemoInbox<InboxItem[]>([]).length : 0,
   );
@@ -302,30 +315,39 @@ function App() {
 
   if (!isAuthenticated)
     return (
-      <AuthScreen
-        onAuthenticated={() => {
-          setIsAuthenticated(true);
-        }}
-      />
+      <>
+        <AuthScreen
+          onAuthenticated={() => {
+            setIsAuthenticated(true);
+          }}
+        />
+        <PwaUpdateNotice />
+      </>
     );
 
   if (isCheckingOnboarding)
     return (
-      <main className="onboarding-page">
-        <p className="onboarding-loading">Menyiapkan ruang akademikmu...</p>
-      </main>
+      <>
+        <main className="onboarding-page">
+          <p className="onboarding-loading">Menyiapkan ruang akademikmu...</p>
+        </main>
+        <PwaUpdateNotice />
+      </>
     );
   if (needsOnboarding)
     return (
-      <OnboardingPage
-        onComplete={() => {
-          window.localStorage.setItem(
-            `nexus-onboarding-complete-${userId}`,
-            "true",
-          );
-          setNeedsOnboarding(false);
-        }}
-      />
+      <>
+        <OnboardingPage
+          onComplete={() => {
+            window.localStorage.setItem(
+              `nexus-onboarding-complete-${userId}`,
+              "true",
+            );
+            setNeedsOnboarding(false);
+          }}
+        />
+        <PwaUpdateNotice />
+      </>
     );
 
   async function handleSignOut() {
@@ -341,10 +363,24 @@ function App() {
     setIsMoreOpen(false);
   }
 
+  function closeQuickCapture() {
+    setIsQuickCaptureOpen(false);
+    setCapture("");
+    setCaptureError("");
+  }
+
   async function handleCapture(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = capture.trim();
-    if (!value) return;
+    if (!value) {
+      setCaptureError("Tuliskan catatan sebelum menyimpan.");
+      return;
+    }
+    setCaptureError("");
+    if (!isOnline && supabase) {
+      setCaptureError("Anda sedang offline. Tersambung kembali untuk menyimpan.");
+      return;
+    }
 
     if (!supabase) {
       const items = getDemoInbox<InboxItem[]>([]);
@@ -367,17 +403,20 @@ function App() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setCaptureError("Sesi Anda berakhir. Silakan masuk kembali.");
+      return;
+    }
     const { error } = await supabase
       .from("inbox_items")
       .insert({ raw_text: value, user_id: user.id });
     if (error) {
-      console.error("Today capture error:", error);
+      console.error("Today capture error", { code: error.code });
+      setCaptureError("Catatan tidak dapat disimpan. Periksa koneksi lalu coba lagi.");
       return;
     }
     setInboxCount((count) => count + 1);
-    setCapture("");
-    setIsQuickCaptureOpen(false);
+    closeQuickCapture();
   }
   return (
     <div className="app-shell">
@@ -394,6 +433,7 @@ function App() {
               key={item.label}
               onClick={() => setActiveView(item.label)}
               type="button"
+              aria-current={activeView === item.label ? "page" : undefined}
             >
               <span className="nav-icon" aria-hidden="true">
                 {item.icon}
@@ -425,10 +465,12 @@ function App() {
           </div>
           <div className="date-context">
             <span className="eyebrow">{todayLabel}</span>
-            <span className="live-dot">
-              {isLiveData
-                ? "Tersinkron dengan akun Anda"
-                : "Menunggu sinkronisasi akun"}
+            <span className={`live-dot${!isOnline && isLiveData ? " offline" : ""}`} role="status" aria-live="polite">
+              {!isOnline && isLiveData
+                ? "Offline · perubahan belum tentu tersimpan"
+                : isLiveData
+                  ? "Tersinkron dengan akun Anda"
+                  : "Menunggu sinkronisasi akun"}
             </span>
           </div>
           <div className="topbar-actions">
@@ -454,10 +496,12 @@ function App() {
         {isQuickCaptureOpen && (
           <div className="modal-backdrop" role="presentation">
             <div
+              ref={quickCaptureRef}
               className="quick-capture-modal"
               role="dialog"
               aria-modal="true"
               aria-labelledby="quick-capture-title"
+              tabIndex={-1}
             >
               <div className="section-heading">
                 <div>
@@ -467,10 +511,7 @@ function App() {
                 <button
                   className="modal-close"
                   type="button"
-                  onClick={() => {
-                    setIsQuickCaptureOpen(false);
-                    setCapture("");
-                  }}
+                  onClick={closeQuickCapture}
                   aria-label="Tutup"
                 >
                   x
@@ -478,22 +519,31 @@ function App() {
               </div>
               <form className="quick-capture-form" onSubmit={handleCapture}>
                 <textarea
-                  autoFocus
                   required
                   rows={4}
                   maxLength={500}
                   value={capture}
-                  onChange={(event) => setCapture(event.target.value)}
+                  onChange={(event) => {
+                    setCapture(event.target.value);
+                    if (captureError) setCaptureError("");
+                  }}
                   placeholder="Misalnya: kumpulkan laporan RPL hari Jumat"
                 />
+                {captureError && (
+                  <p className="form-error" role="alert">
+                    {captureError}
+                  </p>
+                )}
+                {!isOnline && supabase && !captureError && (
+                  <p className="form-hint" role="status">
+                    Anda sedang offline. Tersambung kembali untuk menyimpan.
+                  </p>
+                )}
                 <div className="modal-actions">
                   <button
                     className="quiet-button"
                     type="button"
-                    onClick={() => {
-                      setIsQuickCaptureOpen(false);
-                      setCapture("");
-                    }}
+                    onClick={closeQuickCapture}
                   >
                     Batal
                   </button>
@@ -917,6 +967,7 @@ function App() {
               setIsMoreOpen(false);
             }}
             type="button"
+            aria-current={activeView === item.label ? "page" : undefined}
           >
             <span>{item.icon}</span>
             {item.title}
@@ -938,12 +989,14 @@ function App() {
               : ""
           }
           type="button"
+          aria-expanded={isMoreOpen}
+          aria-controls="mobile-more-menu"
           onClick={() => setIsMoreOpen((open) => !open)}
         >
           <span>...</span>Lainnya
         </button>
         {isMoreOpen && (
-          <div className="mobile-more-menu">
+          <div className="mobile-more-menu" id="mobile-more-menu">
             <button
               type="button"
               onClick={() => {
@@ -974,6 +1027,7 @@ function App() {
           </div>
         )}
       </nav>
+      <PwaUpdateNotice />
     </div>
   );
 }

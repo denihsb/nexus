@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useModalA11y } from "../../lib/useModalA11y";
 import {
   getDemoCourses,
   isMissingSupabaseTableError,
@@ -26,6 +27,9 @@ export function CoursesPage() {
   const [draft, setDraft] = useState<CourseDraft>(emptyDraft);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const courseModalRef = useModalA11y<HTMLDivElement>(isFormOpen, () =>
+    setIsFormOpen(false),
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -278,10 +282,12 @@ export function CoursesPage() {
       {isFormOpen && (
         <div className="modal-backdrop" role="presentation">
           <div
+            ref={courseModalRef}
             className="course-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="course-form-title"
+            tabIndex={-1}
           >
             <div className="section-heading">
               <div>
@@ -294,7 +300,7 @@ export function CoursesPage() {
                 className="modal-close"
                 type="button"
                 onClick={() => setIsFormOpen(false)}
-                aria-label="Close"
+                aria-label="Tutup"
               >
                 x
               </button>
