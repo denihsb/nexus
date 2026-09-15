@@ -21,6 +21,8 @@ import {
 import { supabase } from "./lib/supabase";
 import { enqueueCapture, flushCaptureQueue } from "./lib/offlineQueue";
 import "./App.css";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 type View =
   | "Today"
@@ -59,10 +61,7 @@ function App() {
   const isOnline = useOnlineStatus();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeView, setActiveView] = useState<View>("Today");
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const drawerRef = useModalA11y<HTMLDivElement>(isDrawerOpen, () =>
-    setIsDrawerOpen(false),
-  );
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
   const [recommendationIndex, setRecommendationIndex] = useState(0);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
@@ -372,7 +371,7 @@ function App() {
     setActiveView("Today");
     setContextualizingItem(null);
     setCapture("");
-    setIsDrawerOpen(false);
+    setIsMoreOpen(false);
   }
 
   function closeQuickCapture() {
@@ -462,7 +461,7 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">+</span>
+          <img src="/nexus-logo.png" alt="" className="brand-mark" />
           <span>NEXUS</span>
         </div>
         <div className="workspace-label">RUANG AKADEMIK SAYA</div>
@@ -501,7 +500,8 @@ function App() {
       <main className="main-content">
         <header className="topbar">
           <div className="mobile-brand">
-            <span className="brand-mark">+</span>NEXUS
+            <img src="/nexus-logo.png" alt="" className="brand-mark" />
+            NEXUS
           </div>
           <div className="date-context">
             <span className="eyebrow">{todayLabel}</span>
@@ -998,11 +998,14 @@ function App() {
         )}
       </main>
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {navigation.slice(0, 3).map((item) => (
+        {navigation.slice(0, 4).map((item) => (
           <button
             className={activeView === item.label ? "active" : ""}
             key={item.label}
-            onClick={() => setActiveView(item.label)}
+            onClick={() => {
+              setActiveView(item.label);
+              setIsMoreOpen(false);
+            }}
             type="button"
             aria-current={activeView === item.label ? "page" : undefined}
           >
@@ -1020,76 +1023,52 @@ function App() {
         </button>
         <button
           className={
-            isDrawerOpen ||
-            ["Timeline", "Workload", "Courses", "Settings"].includes(
-              activeView,
-            )
+            isMoreOpen ||
+            ["Workload", "Courses", "Settings"].includes(activeView)
               ? "active"
               : ""
           }
           type="button"
-          aria-expanded={isDrawerOpen}
-          aria-controls="mobile-drawer"
-          onClick={() => setIsDrawerOpen((open) => !open)}
+          aria-expanded={isMoreOpen}
+          aria-controls="mobile-more-menu"
+          onClick={() => setIsMoreOpen((open) => !open)}
         >
-          <span>≡</span>Menu
+          <span>...</span>Lainnya
         </button>
-      </nav>
-      {isDrawerOpen && (
-        <div
-          className="mobile-drawer-backdrop"
-          role="presentation"
-          onClick={() => setIsDrawerOpen(false)}
-        >
-          <div
-            ref={drawerRef}
-            id="mobile-drawer"
-            className="mobile-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Navigasi"
-            tabIndex={-1}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mobile-drawer-header">
-              <div className="brand">
-                <span className="brand-mark">+</span>
-                <span>NEXUS</span>
-              </div>
-              <button
-                className="modal-close"
-                type="button"
-                onClick={() => setIsDrawerOpen(false)}
-                aria-label="Tutup menu"
-              >
-                x
-              </button>
-            </div>
-            <nav aria-label="Navigasi lengkap">
-              {navigation.map((item) => (
-                <button
-                  className={`nav-item ${activeView === item.label ? "active" : ""}`}
-                  key={item.label}
-                  onClick={() => {
-                    setActiveView(item.label);
-                    setIsDrawerOpen(false);
-                  }}
-                  type="button"
-                  aria-current={activeView === item.label ? "page" : undefined}
-                >
-                  <span className="nav-icon" aria-hidden="true">
-                    {item.icon}
-                  </span>
-                  {item.title}
-                  {item.label === "Inbox" && inboxCount > 0 && (
-                    <span className="nav-count">{inboxCount}</span>
-                  )}
-                </button>
-              ))}
-            </nav>
+        {isMoreOpen && (
+          <div className="mobile-more-menu" id="mobile-more-menu">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveView("Workload");
+                setIsMoreOpen(false);
+              }}
+            >
+              Workload
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveView("Courses");
+                setIsMoreOpen(false);
+              }}
+            >
+              Courses
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveView("Settings");
+                setIsMoreOpen(false);
+              }}
+            >
+              Settings
+            </button>
           </div>
-        </div>
-      )}
+        )}
+      </nav>
+      <Analytics />
+      <SpeedInsights />
       <PwaUpdateNotice />
     </div>
   );
