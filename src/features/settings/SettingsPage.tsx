@@ -4,6 +4,11 @@ import {
   persistDemoAuthentication,
 } from "../../lib/demoStore";
 import { supabase } from "../../lib/supabase";
+import {
+  getNotificationSupport,
+  requestNotificationPermission,
+  type NotificationSupport,
+} from "../../lib/useDeadlineReminders";
 
 type SettingsPageProps = {
   onSignOut: () => void;
@@ -18,6 +23,17 @@ export function SettingsPage({
 }: SettingsPageProps) {
   const [displayName, setDisplayName] = useState(initialDisplayName);
   const [email, setEmail] = useState(initialEmail);
+  const [notificationSupport, setNotificationSupport] =
+    useState<NotificationSupport>("unsupported");
+
+  useEffect(() => {
+    setNotificationSupport(getNotificationSupport());
+  }, []);
+
+  async function handleEnableReminders() {
+    const result = await requestNotificationPermission();
+    setNotificationSupport(result);
+  }
 
   useEffect(() => {
     if (!supabase) return;
@@ -105,6 +121,40 @@ export function SettingsPage({
           </div>
         </div>
       </div>
+
+      <section
+        className="focus-section"
+        aria-labelledby="reminders-title"
+      >
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">PENGINGAT</p>
+            <h2 id="reminders-title">Pengingat deadline</h2>
+          </div>
+        </div>
+        <div className="focus-content">
+          <div>
+            <p className="focus-reason">
+              {notificationSupport === "granted"
+                ? "Notifikasi aktif. Anda akan diingatkan saat sebuah tugas mendekati deadline (dalam 24 jam ke depan) setiap kali NEXUS dibuka."
+                : notificationSupport === "denied"
+                  ? "Notifikasi diblokir di pengaturan browser Anda. Anda tetap akan melihat pengingat di dalam aplikasi setiap kali NEXUS dibuka."
+                  : notificationSupport === "unsupported"
+                    ? "Browser/perangkat ini tidak mendukung notifikasi. Anda tetap akan melihat pengingat di dalam aplikasi setiap kali NEXUS dibuka."
+                    : "Aktifkan notifikasi supaya NEXUS bisa mengingatkan Anda saat tugas mendekati deadline. Tanpa ini, pengingat tetap muncul di dalam aplikasi setiap kali dibuka."}
+            </p>
+          </div>
+          {notificationSupport === "default" && (
+            <button
+              className="primary-button"
+              type="button"
+              onClick={handleEnableReminders}
+            >
+              Aktifkan pengingat <span>-&gt;</span>
+            </button>
+          )}
+        </div>
+      </section>
 
       <section
         className="focus-section"

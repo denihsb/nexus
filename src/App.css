@@ -335,6 +335,20 @@ nav {
 .mobile-brand {
   display: none;
 }
+.mobile-menu-button {
+  display: none;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
 .date-context {
   display: flex;
   flex-direction: column;
@@ -779,6 +793,9 @@ h2 {
     display: flex;
     font-size: 14px;
   }
+  .mobile-menu-button {
+    display: flex;
+  }
   .date-context {
     display: none;
   }
@@ -884,25 +901,6 @@ h2 {
   }
   .mobile-nav .mobile-add span {
     display: none;
-  }
-  .mobile-more-menu {
-    position: absolute;
-    right: 10px;
-    bottom: 62px;
-    display: grid;
-    min-width: 130px;
-    padding: 6px;
-    gap: 2px;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    box-shadow: var(--shadow);
-  }
-  .mobile-more-menu button {
-    display: block;
-    padding: 10px 12px;
-    text-align: left;
-    color: var(--ink);
-    font-size: 11px;
   }
   .placeholder-view {
     padding: 70px 22px;
@@ -1685,4 +1683,82 @@ h2 {
 
 :root[data-theme="dark"] .form-hint {
   background: var(--amber-light);
+}
+
+.mobile-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(23, 35, 33, 0.45);
+  display: flex;
+}
+.mobile-drawer {
+  width: min(78vw, 300px);
+  height: 100%;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px;
+  overflow-y: auto;
+  animation: drawer-slide-in 0.18s ease-out;
+}
+@keyframes drawer-slide-in {
+  from {
+    transform: translateX(-16px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mobile-drawer {
+    animation: none;
+  }
+}
+.mobile-drawer-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 22px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  font-size: 15px;
+}
+.mobile-drawer-header .modal-close {
+  margin-left: auto;
+}
+.mobile-drawer nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+@media (min-width: 681px) {
+  .mobile-drawer-backdrop {
+    display: none;
+  }
+}
+
+.reminder-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 30px;
+  background: var(--amber-light);
+  color: var(--amber);
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--line);
+}
+.reminder-banner .modal-close {
+  margin-left: auto;
+}
+@media (max-width: 680px) {
+  .reminder-banner {
+    padding: 10px 18px;
+    font-size: 12px;
+  }
 }

@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { buildFocusSuggestion } from "./domain/priority";
 import { computeDailyWorkload } from "./domain/workload";
 import { useTheme } from "./lib/useTheme";
 import { useModalA11y } from "./lib/useModalA11y";
 import { useOnlineStatus } from "./lib/useOnlineStatus";
+import { useDeadlineReminders } from "./lib/useDeadlineReminders";
 import { PwaUpdateNotice } from "./components/PwaUpdateNotice";
 import { AuthScreen } from "./features/auth/AuthScreen";
 import { CoursesPage } from "./features/courses/CoursesPage";
@@ -61,7 +62,10 @@ function App() {
   const isOnline = useOnlineStatus();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeView, setActiveView] = useState<View>("Today");
-  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const drawerRef = useModalA11y<HTMLDivElement>(isDrawerOpen, () =>
+    setIsDrawerOpen(false),
+  );
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
   const [recommendationIndex, setRecommendationIndex] = useState(0);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
@@ -84,7 +88,22 @@ function App() {
   );  const [profileName, setProfileName] = useState("");
   const [liveTasks, setLiveTasks] = useState<Task[]>([]);
   const [isLiveData, setIsLiveData] = useState(Boolean(supabase));
-  const openTasks = liveTasks.filter((task) => task.status === "open");
+  const [todayLoadError, setTodayLoadError] = useState(false);
+  const [todayReloadKey, setTodayReloadKey] = useState(0);
+  const openTasks = useMemo(
+    () => liveTasks.filter((task) => task.status === "open"),
+    [liveTasks],
+  );
+  const dueSoonTasks = useDeadlineReminders(openTasks);
+  const [isReminderBannerDismissed, setIsReminderBannerDismissed] =
+    useState(false);
+  const dueSoonKey = dueSoonTasks
+    .map((task) => task.id)
+    .sort()
+    .join(",");
+  useEffect(() => {
+    setIsReminderBannerDismissed(false);
+  }, [dueSoonKey]);
   const focusSource = openTasks;
   const focusSuggestions = buildFocusSuggestion(focusSource).slice(0, 2);
   const focusSuggestion = focusSuggestions[recommendationIndex] ?? {
@@ -264,22 +283,34 @@ function App() {
       return;
     }
     const client = supabase;
-    Promise.all([
-      client.from("courses").select("id", { count: "exact", head: true }),
-      client.from("tasks").select("id", { count: "exact", head: true }),
-    ]).then(([courseResult, taskResult]) => {
-      const onboardingComplete =
-        window.localStorage.getItem(`nexus-onboarding-complete-${userId}`) ===
-        "true";
-      setNeedsOnboarding(
-        !onboardingComplete &&
-          !courseResult.error &&
-          !taskResult.error &&
-          (courseResult.count ?? 0) === 0 &&
-          (taskResult.count ?? 0) === 0,
-      );
-      setIsCheckingOnboarding(false);
-    });
+    let isMounted = true;
+    (async () => {
+      try {
+        const [courseResult, taskResult] = await Promise.all([
+          client.from("courses").select("id", { count: "exact", head: true }),
+          client.from("tasks").select("id", { count: "exact", head: true }),
+        ]);
+        if (!isMounted) return;
+        const onboardingComplete =
+          window.localStorage.getItem(
+            `nexus-onboarding-complete-${userId}`,
+          ) === "true";
+        setNeedsOnboarding(
+          !onboardingComplete &&
+            !courseResult.error &&
+            !taskResult.error &&
+            (courseResult.count ?? 0) === 0 &&
+            (taskResult.count ?? 0) === 0,
+        );
+      } catch (error) {
+        console.error("Onboarding check error (network):", error);
+      } finally {
+        if (isMounted) setIsCheckingOnboarding(false);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
   }, [isAuthenticated, userId]);
 
   useEffect(() => {
@@ -294,29 +325,39 @@ function App() {
       return;
     }
 
+    const client = supabase;
     let isMounted = true;
-    supabase
-      .from("tasks")
-      .select("*")
-      .eq("status", "open")
-      .order("due_at", { ascending: true, nullsFirst: false })
-      .then(({ data, error }) => {
+    setTodayLoadError(false);
+    (async () => {
+      try {
+        const { data, error } = await client
+          .from("tasks")
+          .select("*")
+          .eq("status", "open")
+          .order("due_at", { ascending: true, nullsFirst: false });
         if (!isMounted) return;
         if (error) {
           console.error("Today task loading error:", error);
           if (isMissingSupabaseTableError(error)) {
             setLiveTasks([]);
             setIsLiveData(true);
+            return;
           }
+          setTodayLoadError(true);
           return;
         }
         setLiveTasks((data ?? []) as Task[]);
         setIsLiveData(true);
-      });
+      } catch (error) {
+        if (!isMounted) return;
+        console.error("Today task loading error (network):", error);
+        setTodayLoadError(true);
+      }
+    })();
     return () => {
       isMounted = false;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, todayReloadKey]);
 
   useEffect(() => {
     if (!supabase) {
@@ -371,7 +412,9 @@ function App() {
     setActiveView("Today");
     setContextualizingItem(null);
     setCapture("");
-    setIsMoreOpen(false);
+    setIsDrawerOpen(false);
+    setIsQuickCaptureOpen(false);
+    setCaptureError("");
   }
 
   function closeQuickCapture() {
@@ -500,6 +543,16 @@ function App() {
       <main className="main-content">
         <header className="topbar">
           <div className="mobile-brand">
+            <button
+              type="button"
+              className="mobile-menu-button"
+              onClick={() => setIsDrawerOpen(true)}
+              aria-label="Buka menu navigasi"
+              aria-expanded={isDrawerOpen}
+              aria-controls="mobile-drawer"
+            >
+              <span aria-hidden="true">☰</span>
+            </button>
             <img src="/nexus-logo.png" alt="" className="brand-mark" />
             NEXUS
           </div>
@@ -533,6 +586,30 @@ function App() {
             </button>
           </div>
         </header>
+        {dueSoonTasks.length > 0 && !isReminderBannerDismissed && (
+          <div className="reminder-banner" role="status">
+            <span>
+              {dueSoonTasks.length === 1
+                ? `Deadline mendekat: "${dueSoonTasks[0].title}" jatuh tempo dalam 24 jam.`
+                : `${dueSoonTasks.length} tugas mendekati deadline dalam 24 jam ke depan.`}
+            </span>
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => setActiveView("Tasks")}
+            >
+              Lihat tugas
+            </button>
+            <button
+              type="button"
+              className="modal-close"
+              onClick={() => setIsReminderBannerDismissed(true)}
+              aria-label="Tutup pengingat"
+            >
+              x
+            </button>
+          </div>
+        )}
         {isQuickCaptureOpen && (
           <div className="modal-backdrop" role="presentation">
             <div
@@ -762,6 +839,18 @@ function App() {
                 View week <span>-&gt;</span>
               </button>
             </section>
+            {todayLoadError && (
+              <div className="course-message" role="alert">
+                Tugas Anda tidak dapat dimuat. Periksa koneksi lalu coba lagi.
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => setTodayReloadKey((key) => key + 1)}
+                >
+                  Coba lagi
+                </button>
+              </div>
+            )}
             <section className="focus-section" aria-labelledby="focus-title">
               <div className="section-heading">
                 <div>
@@ -998,13 +1087,13 @@ function App() {
         )}
       </main>
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {navigation.slice(0, 4).map((item) => (
+        {navigation.slice(0, 3).map((item) => (
           <button
             className={activeView === item.label ? "active" : ""}
             key={item.label}
             onClick={() => {
               setActiveView(item.label);
-              setIsMoreOpen(false);
+              setIsDrawerOpen(false);
             }}
             type="button"
             aria-current={activeView === item.label ? "page" : undefined}
@@ -1021,52 +1110,59 @@ function App() {
         >
           +
         </button>
-        <button
-          className={
-            isMoreOpen ||
-            ["Workload", "Courses", "Settings"].includes(activeView)
-              ? "active"
-              : ""
-          }
-          type="button"
-          aria-expanded={isMoreOpen}
-          aria-controls="mobile-more-menu"
-          onClick={() => setIsMoreOpen((open) => !open)}
-        >
-          <span>...</span>Lainnya
-        </button>
-        {isMoreOpen && (
-          <div className="mobile-more-menu" id="mobile-more-menu">
-            <button
-              type="button"
-              onClick={() => {
-                setActiveView("Workload");
-                setIsMoreOpen(false);
-              }}
-            >
-              Workload
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveView("Courses");
-                setIsMoreOpen(false);
-              }}
-            >
-              Courses
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveView("Settings");
-                setIsMoreOpen(false);
-              }}
-            >
-              Settings
-            </button>
-          </div>
-        )}
       </nav>
+      {isDrawerOpen && (
+        <div
+          className="mobile-drawer-backdrop"
+          onClick={() => setIsDrawerOpen(false)}
+        >
+          <div
+            ref={drawerRef}
+            id="mobile-drawer"
+            className="mobile-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu navigasi"
+            tabIndex={-1}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mobile-drawer-header">
+              <img src="/nexus-logo.png" alt="" className="brand-mark" />
+              <span>NEXUS</span>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setIsDrawerOpen(false)}
+                aria-label="Tutup menu"
+              >
+                x
+              </button>
+            </div>
+            <nav aria-label="Navigasi lengkap">
+              {navigation.map((item) => (
+                <button
+                  className={`nav-item ${activeView === item.label ? "active" : ""}`}
+                  key={item.label}
+                  onClick={() => {
+                    setActiveView(item.label);
+                    setIsDrawerOpen(false);
+                  }}
+                  type="button"
+                  aria-current={activeView === item.label ? "page" : undefined}
+                >
+                  <span className="nav-icon" aria-hidden="true">
+                    {item.icon}
+                  </span>
+                  {item.title}
+                  {item.label === "Inbox" && inboxCount > 0 && (
+                    <span className="nav-count">{inboxCount}</span>
+                  )}
+                </button>
+              ))}
+            </nav>
+          </div>
+        </div>
+      )}
       <Analytics />
       <SpeedInsights />
       <PwaUpdateNotice />
