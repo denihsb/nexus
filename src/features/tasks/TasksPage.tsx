@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useModalA11y } from "../../lib/useModalA11y";
+import { getCompletionMessage } from "../../domain/completionMessage";
 import {
   getDemoCourses,
   getDemoTasks,
@@ -75,6 +76,17 @@ export function TasksPage({
 }: TasksPageProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [activeTab, setActiveTab] = useState<"open" | "completed">("open");
+  const [undoInfo, setUndoInfo] = useState<{
+    task: Task;
+    label: string;
+  } | null>(null);
+  const undoTimeoutRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (undoTimeoutRef.current) window.clearTimeout(undoTimeoutRef.current);
+    };
+  }, []);
   const [draft, setDraft] = useState<TaskDraft>(emptyDraft);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -91,7 +103,7 @@ export function TasksPage({
     let isMounted = true;
     if (!supabase) {
       const demoTasks = getDemoTasks<Task[]>([]).filter(
-        (task) => task.status === "open",
+        (task) => task.status === "open" || task.status === "completed",
       );
       const demoCourses = getDemoCourses<Course[]>([]).filter(
         (course) => !course.is_archived,
@@ -113,7 +125,7 @@ export function TasksPage({
       supabase
         .from("tasks")
         .select("*")
-        .eq("status", "open")
+        .in("status", ["open", "completed"])
         .order("due_at", { ascending: true, nullsFirst: false }),
       supabase
         .from("courses")
@@ -129,7 +141,7 @@ export function TasksPage({
           console.error("Task loading error:", missingTableError);
           if (isMissingSupabaseTableError(missingTableError)) {
             const demoTasks = getDemoTasks<Task[]>([]).filter(
-              (task) => task.status === "open",
+              (task) => task.status === "open" || task.status === "completed",
             );
             const demoCourses = getDemoCourses<Course[]>([]).filter(
               (course) => !course.is_archived,
@@ -286,29 +298,96 @@ export function TasksPage({
   }
 
   async function updateStatus(task: Task, status: "completed" | "archived") {
+    const timestampField =
+      status === "completed" ? "completed_at" : "archived_at";
+    const timestamp = new Date().toISOString();
+
     if (!supabase) {
-      const nextTasks = tasks.filter((item) => item.id !== task.id);
+      const updatedTask: Task = {
+        ...task,
+        status,
+        [timestampField]: timestamp,
+      };
+      const nextTasks = tasks.map((item) =>
+        item.id === task.id ? updatedTask : item,
+      );
       setTasks(nextTasks);
       onTasksChanged?.(nextTasks);
       setDemoTasks(nextTasks);
+      showUndo(task, status);
       return;
     }
-    const values =
-      status === "completed"
-        ? { status, completed_at: new Date().toISOString() }
-        : { status, archived_at: new Date().toISOString() };
     const { error } = await supabase
       .from("tasks")
-      .update(values)
+      .update({ status, [timestampField]: timestamp })
       .eq("id", task.id);
     if (error) {
       console.error("Task status error:", error);
       setMessage("Tugas tidak dapat diperbarui. Silakan coba lagi.");
       return;
     }
-    setTasks((items) => items.filter((item) => item.id !== task.id));
-    onTasksChanged?.(tasks.filter((item) => item.id !== task.id));
-    setMessage(status === "completed" ? `${task.title} selesai.` : `${task.title} diarsipkan.`);
+    const nextTasks = tasks.map((item) =>
+      item.id === task.id
+        ? { ...item, status, [timestampField]: timestamp }
+        : item,
+    );
+    setTasks(nextTasks);
+    onTasksChanged?.(nextTasks);
+    showUndo(task, status);
+  }
+
+  function showUndo(task: Task, status: "completed" | "archived") {
+    if (undoTimeoutRef.current) window.clearTimeout(undoTimeoutRef.current);
+    setUndoInfo({
+      task,
+      label:
+        status === "completed"
+          ? getCompletionMessage(task)
+          : `"${task.title}" diarsipkan.`,
+    });
+    undoTimeoutRef.current = window.setTimeout(() => {
+      setUndoInfo(null);
+    }, 6000);
+  }
+
+  async function restoreTask(task: Task) {
+    if (!supabase) {
+      const restored: Task = {
+        ...task,
+        status: "open",
+        completed_at: null,
+        archived_at: null,
+      };
+      const nextTasks = tasks.map((item) =>
+        item.id === task.id ? restored : item,
+      );
+      setTasks(nextTasks);
+      onTasksChanged?.(nextTasks);
+      setDemoTasks(nextTasks);
+      return;
+    }
+    const { error } = await supabase
+      .from("tasks")
+      .update({ status: "open", completed_at: null, archived_at: null })
+      .eq("id", task.id);
+    if (error) {
+      console.error("Task restore error:", error);
+      setMessage("Tugas tidak dapat dipulihkan. Silakan coba lagi.");
+      return;
+    }
+    const nextTasks = tasks.map((item) =>
+      item.id === task.id
+        ? { ...item, status: "open" as const, completed_at: null, archived_at: null }
+        : item,
+    );
+    setTasks(nextTasks);
+    onTasksChanged?.(nextTasks);
+  }
+
+  function handleUndoClick() {
+    if (undoTimeoutRef.current) window.clearTimeout(undoTimeoutRef.current);
+    if (undoInfo) void restoreTask(undoInfo.task);
+    setUndoInfo(null);
   }
 
   async function rescheduleTask(task: Task) {
@@ -335,6 +414,11 @@ export function TasksPage({
   function formatDue(value: string | null) {
     return formatTaskDue(value);
   }
+
+  const openTaskList = tasks.filter((task) => task.status === "open");
+  const completedTaskList = tasks
+    .filter((task) => task.status === "completed")
+    .sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
 
   return (
     <div className="page-wrap tasks-page">
@@ -368,86 +452,153 @@ export function TasksPage({
           )}
         </div>
       )}
+      <div className="task-tabs" role="tablist" aria-label="Filter tugas">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "open"}
+          className={activeTab === "open" ? "active" : ""}
+          onClick={() => setActiveTab("open")}
+        >
+          Terbuka
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "completed"}
+          className={activeTab === "completed" ? "active" : ""}
+          onClick={() => setActiveTab("completed")}
+        >
+          Selesai
+        </button>
+      </div>
       {isLoading ? (
         <div className="course-state">Memuat tugas Anda...</div>
-      ) : tasks.length === 0 ? (
+      ) : activeTab === "open" ? (
+        openTaskList.length === 0 ? (
+          <div className="course-empty">
+            <span className="empty-mark">+</span>
+            <h2>Daftar tugas Anda masih kosong.</h2>
+            <p>
+              Tangkap sesuatu di Kotak Masuk atau tambahkan tanggung jawab baru di sini.
+            </p>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => openCreateForm()}
+            >
+              Tambah tugas <span>-&gt;</span>
+            </button>
+          </div>
+        ) : (
+          <div className="task-list">
+            {openTaskList.map((task) => {
+              const course = courses.find((item) => item.id === task.course_id);
+              return (
+                <article className="task-item" key={task.id}>
+                  <button
+                    className="task-check"
+                    type="button"
+                    aria-label={`Selesaikan ${task.title}`}
+                    onClick={() => void updateStatus(task, "completed")}
+                  >
+                    {" "}
+                  </button>
+                  <div className="task-main">
+                    <h2>{task.title}</h2>
+                    <div className="task-meta">
+                      <span>{course?.code || course?.name || "Unassigned"}</span>
+                      <span
+                        className={
+                          task.due_at && new Date(task.due_at) < new Date()
+                            ? "overdue-text"
+                            : ""
+                        }
+                      >
+                        {formatDue(task.due_at)}
+                      </span>
+                      <span>
+                        {task.effort_minutes
+                          ? `${task.effort_minutes} menit`
+                          : "Durasi belum diatur"}
+                      </span>
+                    </div>
+                  </div>
+                  <span className={`importance importance-${task.importance}`}>
+                    {task.importance === 3
+                      ? "Tinggi"
+                      : task.importance === 2
+                        ? "Sedang"
+                        : "Rendah"}
+                  </span>
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={() => openEditForm(task)}
+                  >
+                    Ubah
+                  </button>
+                  {task.due_at && new Date(`${dateKey(task.due_at)}T12:00:00`) < new Date(new Date().setHours(12, 0, 0, 0)) && (
+                    <button className="text-button" type="button" onClick={() => void rescheduleTask(task)}>
+                      Jadwalkan besok
+                    </button>
+                  )}
+                  <button
+                    className="quiet-button"
+                    type="button"
+                    onClick={() => void updateStatus(task, "archived")}
+                  >
+                    Arsipkan
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        )
+      ) : completedTaskList.length === 0 ? (
         <div className="course-empty">
-          <span className="empty-mark">+</span>
-          <h2>Daftar tugas Anda masih kosong.</h2>
-          <p>
-            Tangkap sesuatu di Kotak Masuk atau tambahkan tanggung jawab baru di sini.
-          </p>
-          <button
-            className="primary-button"
-            type="button"
-            onClick={() => openCreateForm()}
-          >
-            Tambah tugas <span>-&gt;</span>
-          </button>
+          <span className="empty-mark">O</span>
+          <h2>Belum ada tugas yang selesai.</h2>
+          <p>Tugas yang Anda tandai selesai akan muncul di sini.</p>
         </div>
       ) : (
         <div className="task-list">
-          {tasks.map((task) => {
+          {completedTaskList.map((task) => {
             const course = courses.find((item) => item.id === task.course_id);
             return (
-              <article className="task-item" key={task.id}>
-                <button
-                  className="task-check"
-                  type="button"
-                  aria-label={`Selesaikan ${task.title}`}
-                  onClick={() => void updateStatus(task, "completed")}
-                >
+              <article className="task-item task-item-completed" key={task.id}>
+                <span className="task-check task-check-done" aria-hidden="true">
                   {" "}
-                </button>
+                </span>
                 <div className="task-main">
                   <h2>{task.title}</h2>
                   <div className="task-meta">
                     <span>{course?.code || course?.name || "Unassigned"}</span>
-                    <span
-                      className={
-                        task.due_at && new Date(task.due_at) < new Date()
-                          ? "overdue-text"
-                          : ""
-                      }
-                    >
-                      {formatDue(task.due_at)}
-                    </span>
                     <span>
-                      {task.effort_minutes
-                        ? `${task.effort_minutes} menit`
-                        : "Durasi belum diatur"}
+                      {task.completed_at
+                        ? `Selesai ${new Date(task.completed_at).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}`
+                        : "Selesai"}
                     </span>
                   </div>
                 </div>
-                <span className={`importance importance-${task.importance}`}>
-                  {task.importance === 3
-                    ? "Tinggi"
-                    : task.importance === 2
-                      ? "Sedang"
-                      : "Rendah"}
-                </span>
                 <button
                   className="text-button"
                   type="button"
-                  onClick={() => openEditForm(task)}
+                  onClick={() => void restoreTask(task)}
                 >
-                  Ubah
-                </button>
-                {task.due_at && new Date(`${dateKey(task.due_at)}T12:00:00`) < new Date(new Date().setHours(12, 0, 0, 0)) && (
-                  <button className="text-button" type="button" onClick={() => void rescheduleTask(task)}>
-                    Jadwalkan besok
-                  </button>
-                )}
-                <button
-                  className="quiet-button"
-                  type="button"
-                  onClick={() => void updateStatus(task, "archived")}
-                >
-                  Arsipkan
+                  Pulihkan
                 </button>
               </article>
             );
           })}
+        </div>
+      )}
+      {undoInfo && (
+        <div className="undo-toast" role="status">
+          <span>{undoInfo.label}</span>
+          <button type="button" className="link-button" onClick={handleUndoClick}>
+            Urungkan
+          </button>
         </div>
       )}
       {isFormOpen && (

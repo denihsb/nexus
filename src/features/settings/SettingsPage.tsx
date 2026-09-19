@@ -10,6 +10,10 @@ import {
   type NotificationSupport,
 } from "../../lib/useDeadlineReminders";
 
+// TODO: ganti dengan link kamu sendiri — WhatsApp ("https://wa.me/62..."),
+// Google Form, atau biarkan mailto: kalau lebih suka lewat email.
+const FEEDBACK_URL = "mailto:hello@usenexus.my.id?subject=Masukan%20NEXUS";
+
 type SettingsPageProps = {
   onSignOut: () => void;
   displayName?: string;
@@ -153,6 +157,29 @@ export function SettingsPage({
               Aktifkan pengingat <span>-&gt;</span>
             </button>
           )}
+        </div>
+      </section>
+
+      <section
+        className="focus-section"
+        aria-labelledby="feedback-title"
+      >
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">BANTUAN</p>
+            <h2 id="feedback-title">Laporkan masalah atau beri masukan</h2>
+          </div>
+        </div>
+        <div className="focus-content">
+          <div>
+            <p className="focus-reason">
+              Menemukan bug atau punya ide perbaikan? Kabari langsung —
+              masukan Anda membantu NEXUS jadi lebih baik.
+            </p>
+          </div>
+          <a className="primary-button" href={FEEDBACK_URL}>
+            Kirim masukan <span>-&gt;</span>
+          </a>
         </div>
       </section>
 
