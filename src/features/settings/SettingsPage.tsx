@@ -12,7 +12,7 @@ import {
 
 // TODO: ganti dengan link kamu sendiri — WhatsApp ("https://wa.me/62..."),
 // Google Form, atau biarkan mailto: kalau lebih suka lewat email.
-const FEEDBACK_URL = "mailto:hello@usenexus.my.id?subject=Masukan%20NEXUS";
+const FEEDBACK_URL = "https://wa.me/6285184186094";
 
 type SettingsPageProps = {
   onSignOut: () => void;
@@ -173,8 +173,7 @@ export function SettingsPage({
         <div className="focus-content">
           <div>
             <p className="focus-reason">
-              Menemukan bug atau punya ide perbaikan? Kabari langsung —
-              masukan Anda membantu NEXUS jadi lebih baik.
+              Menemukan bug atau punya ide perbaikan? Kabari langsung, masukan anda berarti.
             </p>
           </div>
           <a className="primary-button" href={FEEDBACK_URL}>
